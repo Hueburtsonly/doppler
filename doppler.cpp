@@ -168,7 +168,7 @@ recompute:
       }
       avgAbs /= N;
 
-      int highSet = (int)floor(4 * log10(avgAbs * 1.1 * 1.25)) * 5 - 4;
+      int highSet = (int)floor(4 * log10(avgAbs * 111.1 * 1.25)) * 5 - 4;
       int lowSet = (int)floor(4 * log10(avgAbs * 1.1 / 1.25)) * 5 - 4;
       if (highSet < -54) {
         highSet = -54;
