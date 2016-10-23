@@ -30,42 +30,46 @@ bbStatus tgOpen(void) {
 bbStatus tgSetTg(double center, double level) {
   int ret;
   uint32_t fset = (uint32_t)(center / 10 + 0.5);
-  uint8_t aset = 0x32;
-  for (int lev = -10; lev >= -30; --lev) {
-    if (lev > level + 0.1) continue;
-    aset = (-10 - lev) * 2 + 0x0a;
-    break;
+  uint8_t aset = 0x3c;
+  if (fset != 0) {
+    for (int lev = -10; lev >= -30; --lev) {
+      if (lev > level + 0.1) continue;
+      aset = (-10 - lev) * 2 + 0x05;
+      break;
+    }
   }
-  unsigned char buf[12];
-  buf[0] = 'F';
-  buf[1] = fset & 0xff;
-  buf[2] = (fset >> 8) & 0xff;
-  buf[3] = (fset >> 16) & 0xff;
-  buf[4] = (fset >> 24) & 0xff;
-  buf[5] = 0xC0;
-  buf[6] = 'A';
-  buf[7] = aset;
-  buf[8] = 0xC0;
-  buf[9] = 'M';
-  buf[10] = (center >= 4e9) ? 0x02 : 0x01;
-  buf[11] = 0xC0;
 
-  fprintf(stderr, "Writing %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x \r\n"
-    , (unsigned int)(buf[0])
-    , (unsigned int)(buf[1])
-    , (unsigned int)(buf[2])
-    , (unsigned int)(buf[3])
-    , (unsigned int)(buf[4])
-    , (unsigned int)(buf[5])
-    , (unsigned int)(buf[6])
-    , (unsigned int)(buf[7])
-    , (unsigned int)(buf[8])
-    , (unsigned int)(buf[9])
-    , (unsigned int)(buf[10])
-    , (unsigned int)(buf[11])
-    );
+  unsigned char buf[16];
+  int len = 0;
+  buf[len++] = 'F';
+  for (int i = 0; i < 4; i++) {
+    unsigned char byte = fset & 0xff;
+    fset >>= 8;
+    if (byte == 0xc0) {
+      buf[len++] = 0xdb;
+      buf[len++] = 0xdc;
+    } else if (byte == 0xdb) {
+      buf[len++] = 0xdb;
+      buf[len++] = 0xdd;
+    } else {
+      buf[len++] = byte;
+    }
+  }
+  buf[len++] = 0xc0;
+  buf[len++] = 'A';
+  buf[len++] = aset;
+  buf[len++] = 0xc0;
+  //buf[len++] = 'M';
+  //buf[len++] = (center >= 4e9) ? 0x02 : 0x01;
+  //buf[len++] = 0xC0;
 
-  if ((ret = ftdi_write_data(ftdi, buf, 9)) < 0) {
+  fprintf(stderr, "Writing ");
+  for (int i = 0; i < len; i++) {
+    fprintf(stderr, "%02x ", (unsigned int)(buf[i]));
+  }
+  fprintf(stderr, "\r\n");
+
+  if ((ret = ftdi_write_data(ftdi, buf, len)) < 0) {
     fprintf(stderr, "unable to write to ftdi device a: %d (%s)\n", ret, ftdi_get_error_string(ftdi));
     return bbDeviceConnectionErr;
   }

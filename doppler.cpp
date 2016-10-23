@@ -38,8 +38,8 @@ int main(int argc, const char** argv) {
   int exitCode = 0;
   int wantTg = 2;
   int device;
-  double center = 2.98e9;
-  double outputLevel = -10; //dBm
+  double center = 2.943e9;
+  double outputLevel = -22.3; //dBm
   int inputRef = -70; //dBm
   inputRef -= (inputRef-1) % 5;
 
@@ -230,7 +230,7 @@ recompute:
 
 unwindFromTg:
   if (wantTg) {
-    tgSetTg(915e6, -100);
+    tgSetTg(0, -100);
     tgClose();
   }
 
