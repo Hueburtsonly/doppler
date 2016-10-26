@@ -19,26 +19,32 @@ public class Gui extends JPanel {
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		frame.setVisible(true);
 
-		gui.run();
+		gui.run(frame);
 	}
 
 	public Gui() {}
 
 	public void paintComponent(Graphics g) {
 		super.paintComponent(g);
-
+		int width = getWidth();
+		int height = getHeight();
+		int cx = width/2;
+		int cy = height/2;
+		int r = height / 3;
 		g.drawString("Phase = " + phase, 20,20);
 		g.drawString("Power = " + power, 20,40);
+		g.drawLine(cx, cy, cx + (int)(r * Math.cos(phase / 180 * Math.PI)), cy + (int)(r * Math.sin(phase / 180 * Math.PI)));
 	}
 
 
-    public void run() throws Exception {
+    public void run(JFrame frame) throws Exception {
 		BufferedReader bufferReader = new BufferedReader(new InputStreamReader(System.in));
 		while (true) {
 			String[] parts = bufferReader.readLine().split(",");
-			phase = Double.parseDouble(parts[0]);
-			power = Double.parseDouble(parts[1]);
+			phase = phase + 0.3 * ((Double.parseDouble(parts[0]) - phase+720+180)%360-180);
+			power = power * 0.7 + 0.3 * Double.parseDouble(parts[1]);
 			repaint();
+			frame.getToolkit().sync();
 			Thread.sleep(10);
 		}
 	}

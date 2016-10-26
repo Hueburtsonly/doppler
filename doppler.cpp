@@ -26,7 +26,7 @@ static inline void drawBar(double size, char* center, char ch) {
   }
 }
 
-#define ACCUM_LEN 30
+#define ACCUM_LEN 100
 
 int main(int argc, const char** argv) {
   struct sigaction new_action;
@@ -140,8 +140,8 @@ int main(int argc, const char** argv) {
     double angleOffset = 0;
     double accumI = 0;
     double accumQ = 0;
-    double accumCount = 0;
-    int accumDivisor = 0;
+    double accumCount = ACCUM_LEN;
+    int accumDivisor = ACCUM_LEN;
     double offsetI = 0;
     double offsetQ = 0;
     for (int frame = 0;; frame = 1) {
@@ -157,8 +157,8 @@ int main(int argc, const char** argv) {
         exitCode = 1;
         break;
       }
-      float sumI = 0;
-      float sumQ = 0;
+      float sumI = -offsetI;
+      float sumQ = -offsetQ;
       for (int i = 0; i < N; i++) {
         sumI += iqData[2*i];
         sumQ += iqData[2*i+1];
@@ -167,8 +167,8 @@ int main(int argc, const char** argv) {
       }
       double avgAbs = hypot(sumI, sumQ);
 recompute:
-      float normI = (cos(angleOffset) * sumI / avgAbs + sin(angleOffset) * sumQ / avgAbs) - offsetI;
-      float normQ = (cos(angleOffset) * sumQ / avgAbs - sin(angleOffset) * sumI / avgAbs) - offsetQ;
+      float normI = (cos(angleOffset) * sumI / avgAbs + sin(angleOffset) * sumQ / avgAbs);
+      float normQ = (cos(angleOffset) * sumQ / avgAbs - sin(angleOffset) * sumI / avgAbs);
       float angle = atan2(normI, normQ);
       if (prevAngle >= 0) {
         angleOffset = fmod(angleOffset + prevAngle - angle + (M_PI * 2), M_PI * 2);;
@@ -227,8 +227,8 @@ recompute:
 
 
       if (accumCount != 0) {
-        accumI += normI;
-        accumQ += normQ;
+        accumI += sumI;
+        accumQ += sumQ;
         if (--accumCount == 0) {
           offsetI = accumI / accumDivisor;
           offsetQ = accumQ / accumDivisor;
