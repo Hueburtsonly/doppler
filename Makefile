@@ -4,14 +4,8 @@ doppler: doppler.cpp usbtg.cpp usbtg.h
 run: doppler
 	./doppler
 
-rungui: doppler gui/gui
-	./doppler | gui/gui
+rungui: doppler gui/gui.class
+	./doppler | java -cp gui Gui
 
-gui/gui: qui/Makefile .PHONY
-	cd gui && make
-
-gui/Makefile: gui/gui.pro
-	cd gui && qmake
-
-.PHONY:
-	
+gui/gui.class: gui/Gui.java
+	cd gui && javac Gui.java

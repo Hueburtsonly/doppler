@@ -7,7 +7,6 @@
 #include "usbtg.h"
 #include <unistd.h>
 #include <signal.h>
-#include <curses.h>
 
 volatile int closing = 0;
 
@@ -35,10 +34,6 @@ int main(int argc, const char** argv) {
   sigemptyset (&new_action.sa_mask);
   new_action.sa_flags = 0;
   sigaction(SIGINT, &new_action, NULL);
-
-  initscr();
-  cbreak();
-  nodelay(0,1);
 
   bbStatus status;
   int exitCode = 0;
@@ -241,7 +236,7 @@ recompute:
         }
       }
 
-      char ich = getch();
+      char ich = 0; //getch();
       if (ich == '0') {
         accumCount += ACCUM_LEN;
         accumDivisor += ACCUM_LEN;
@@ -271,6 +266,5 @@ unwindFromDevice:
   bbCloseDevice(device);
 
 unwindFromStart:
-  endwin();
   return exitCode;
 }
