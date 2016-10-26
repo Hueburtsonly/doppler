@@ -11,7 +11,7 @@ public class Gui extends JPanel {
 	double phase = 0; // degrees
 	double power = 0; // dBm
 
-	public static void main(String[] args) throws IOException {
+	public static void main(String[] args) throws Exception {
 		JFrame frame = new JFrame("Doppler");
 		Gui gui = new Gui();
 		frame.add(gui);
@@ -32,13 +32,14 @@ public class Gui extends JPanel {
 	}
 
 
-	public void run() throws IOException {
+    public void run() throws Exception {
 		BufferedReader bufferReader = new BufferedReader(new InputStreamReader(System.in));
 		while (true) {
 			String[] parts = bufferReader.readLine().split(",");
 			phase = Double.parseDouble(parts[0]);
 			power = Double.parseDouble(parts[1]);
 			repaint();
+			Thread.sleep(10);
 		}
 	}
 

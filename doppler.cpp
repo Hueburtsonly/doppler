@@ -35,6 +35,8 @@ int main(int argc, const char** argv) {
   new_action.sa_flags = 0;
   sigaction(SIGINT, &new_action, NULL);
 
+  setvbuf(stdout, NULL, _IONBF, 0);
+  
   bbStatus status;
   int exitCode = 0;
   int wantTg = 2;
@@ -188,7 +190,7 @@ recompute:
       drawBar(normQ, buf + 41, '-');
 
       fprintf(stderr, "%s%cmag=%.2fdBm @ %3.1f°%cavgAbs=%.2le output=%.1lf ref=%d %d~%d %.1f %.1f                 \r", buf, isOverflow ? '*' : ' ', 20 * log10(avgAbs), (angle / M_PI + 1) * 180, (accumCount == 0) ? ' ' : '*' , avgAbs, outputLevel, inputRef, highSet, lowSet, sd / 1.0e6, bd / 1.0e6);
-      printf("%lf,%lf\r\n", 20 * log10(avgAbs), (angle / M_PI + 1) * 180);
+      printf("%lf,%lf\r\n", (angle / M_PI + 1) * 180, 20 * log10(avgAbs)); 
 
       drawBar(normI, buf + 14, ' ');
       drawBar(normQ, buf + 41, ' ');
