@@ -7,6 +7,7 @@
 #include "usbtg.h"
 #include <unistd.h>
 #include <signal.h>
+#include <curses.h>
 
 volatile int closing = 0;
 
@@ -26,6 +27,7 @@ static inline void drawBar(double size, char* center, char ch) {
   }
 }
 
+#define ACCUM_LEN 30
 
 int main(int argc, const char** argv) {
   struct sigaction new_action;
@@ -33,6 +35,10 @@ int main(int argc, const char** argv) {
   sigemptyset (&new_action.sa_mask);
   new_action.sa_flags = 0;
   sigaction(SIGINT, &new_action, NULL);
+
+  initscr();
+  cbreak();
+  nodelay(0,1);
 
   bbStatus status;
   int exitCode = 0;
@@ -135,6 +141,12 @@ int main(int argc, const char** argv) {
     long bd = 0;
     double prevAngle = -1;
     double angleOffset = 0;
+    double accumI = 0;
+    double accumQ = 0;
+    double accumCount = 0;
+    int accumDivisor = 0;
+    double offsetI = 0;
+    double offsetQ = 0;
     for (int frame = 0;; frame = 1) {
       status = bbFetchRaw(device, iqData, 0);
       timespec_get(&tsBefore, TIME_UTC);
@@ -158,8 +170,8 @@ int main(int argc, const char** argv) {
       }
       double avgAbs = hypot(sumI, sumQ);
 recompute:
-      float normI = cos(angleOffset) * sumI / avgAbs + sin(angleOffset) * sumQ / avgAbs;
-      float normQ = cos(angleOffset) * sumQ / avgAbs - sin(angleOffset) * sumI / avgAbs;
+      float normI = (cos(angleOffset) * sumI / avgAbs + sin(angleOffset) * sumQ / avgAbs) - offsetI;
+      float normQ = (cos(angleOffset) * sumQ / avgAbs - sin(angleOffset) * sumI / avgAbs) - offsetQ;
       float angle = atan2(normI, normQ);
       if (prevAngle >= 0) {
         angleOffset = fmod(angleOffset + prevAngle - angle + (M_PI * 2), M_PI * 2);;
@@ -180,7 +192,8 @@ recompute:
       drawBar(normI, buf + 14, '-');
       drawBar(normQ, buf + 41, '-');
 
-      fprintf(stderr, "%s%cmag=%.2fdBm @ %3.1f° avgAbs=%.2le output=%.1lf ref=%d %d~%d %.1f %.1f                 \r", buf, isOverflow ? '*' : ' ', 20 * log10(avgAbs), (angle / M_PI + 1) * 180, avgAbs, outputLevel, inputRef, highSet, lowSet, sd / 1.0e6, bd / 1.0e6);
+      fprintf(stderr, "%s%cmag=%.2fdBm @ %3.1f°%cavgAbs=%.2le output=%.1lf ref=%d %d~%d %.1f %.1f                 \r", buf, isOverflow ? '*' : ' ', 20 * log10(avgAbs), (angle / M_PI + 1) * 180, (accumCount == 0) ? ' ' : '*' , avgAbs, outputLevel, inputRef, highSet, lowSet, sd / 1.0e6, bd / 1.0e6);
+      printf("%lf,%lf\r\n", 20 * log10(avgAbs), (angle / M_PI + 1) * 180);
 
       drawBar(normI, buf + 14, ' ');
       drawBar(normQ, buf + 41, ' ');
@@ -198,7 +211,7 @@ recompute:
       } else if (highSet < inputRef) {
         inputRef = highSet;
         changedLevel = 1;
-	}*/
+  }*/
       if (changedLevel) {
         status = bbConfigureLevel(device, inputRef, -1);
         if (status != bbNoError) {
@@ -213,6 +226,25 @@ recompute:
           goto unwindFromTg;
         }
         prevAngle = angle;
+      }
+
+
+      if (accumCount != 0) {
+        accumI += normI;
+        accumQ += normQ;
+        if (--accumCount == 0) {
+          offsetI = accumI / accumDivisor;
+          offsetQ = accumQ / accumDivisor;
+          accumI = 0;
+          accumQ = 0;
+          accumDivisor = 0;
+        }
+      }
+
+      char ich = getch();
+      if (ich == '0') {
+        accumCount += ACCUM_LEN;
+        accumDivisor += ACCUM_LEN;
       }
 
       timespec_get(&tsAfter, TIME_UTC);
@@ -239,5 +271,6 @@ unwindFromDevice:
   bbCloseDevice(device);
 
 unwindFromStart:
+  endwin();
   return exitCode;
 }
