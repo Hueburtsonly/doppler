@@ -39,8 +39,8 @@ int main(int argc, const char** argv) {
   int wantTg = 2;
   int device;
   double center = 2.943e9;
-  double outputLevel = -22.3; //dBm
-  int inputRef = -70; //dBm
+  double outputLevel = -22; //dBm
+  int inputRef = 0; //dBm
   inputRef -= (inputRef-1) % 5;
 
   status = bbOpenDevice(&device);
@@ -180,7 +180,7 @@ recompute:
       drawBar(normI, buf + 14, '-');
       drawBar(normQ, buf + 41, '-');
 
-      fprintf(stderr, "%s%cmag=%.2fdBm @ %3.1f° avgAbs=%.2le output=%.1lf ref=%d %d~%d %.1f %.1f                 \r", buf, isOverflow ? '*' : ' ', 20 * log10(avgAbs / 0.77), (angle / M_PI + 1) * 180, avgAbs, outputLevel, inputRef, highSet, lowSet, sd / 1.0e6, bd / 1.0e6);
+      fprintf(stderr, "%s%cmag=%.2fdBm @ %3.1f° avgAbs=%.2le output=%.1lf ref=%d %d~%d %.1f %.1f                 \r", buf, isOverflow ? '*' : ' ', 20 * log10(avgAbs), (angle / M_PI + 1) * 180, avgAbs, outputLevel, inputRef, highSet, lowSet, sd / 1.0e6, bd / 1.0e6);
 
       drawBar(normI, buf + 14, ' ');
       drawBar(normQ, buf + 41, ' ');
@@ -191,13 +191,14 @@ recompute:
       }
 
       int changedLevel = 0;
+      /*
       if (lowSet > inputRef) {
         inputRef = lowSet;
         changedLevel = 1;
       } else if (highSet < inputRef) {
         inputRef = highSet;
         changedLevel = 1;
-      }
+	}*/
       if (changedLevel) {
         status = bbConfigureLevel(device, inputRef, -1);
         if (status != bbNoError) {
