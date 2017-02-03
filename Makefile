@@ -9,3 +9,9 @@ rungui: doppler gui/gui.class
 
 gui/gui.class: gui/Gui.java
 	cd gui && javac Gui.java
+
+spectrum: spectrum.cpp
+	g++ spectrum.cpp -o spectrum -lglut -lGL -lGLEW
+
+runspectrum: spectrum
+	./spectrum
