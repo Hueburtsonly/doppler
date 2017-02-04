@@ -39,7 +39,7 @@ const char* plotFragmentSource = SHADER_SOURCE(
       if (relative.x >= 0) {
   vec2 range = texelFetch(data, ivec2(floor(relative.x * axes.q + axes.p),0), 0).rg * axes.t; // small then large
   //  range = vec2(0.125, 0.5) * 1024.0;
-  if (fromRef > range.s && fromRef < range.t) {
+  if (fromRef > (range.s-1.0) && fromRef < range.t) {
     fragColor = vec4(0.0, 1.0, 0.3, 1.0);
     return;
   }
@@ -291,7 +291,7 @@ glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   for (i=0; i < 60 * 2; i++ ) {
     //datums[i] = (rand() & 0xffff) / (float)(0xffff);
   }
-  //printf("sTraceLen: %d\n", src->traceLen);
+  printf("midTrace: %f   %f\n", datums[(src->traceLen/2)*2], datums[(src->traceLen/2)*2+1]);
 
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, MAX_TRACE_LEN, 1, 0, GL_RG, GL_FLOAT, datums);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -372,7 +372,7 @@ int main(int argc, char** argv) {
 
 
   glutDisplayFunc(displayMe);
-  //  glutIdleFunc(displayMe);
+   glutIdleFunc(displayMe);
 
   glutKeyboardFunc(keyboardFunc);
   glutSpecialFunc(specialFunc);

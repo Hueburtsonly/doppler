@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include "linux_bb60_sdk/include/bb_api.h"
-
+#include <float.h>
 
 extern const char* readback;
 
@@ -12,6 +12,7 @@ double span = 1e9; // Hz
 double refLevel = -10; // dBm
 
 #define MAX_TRACE_LEN 2048
+#define MAX_RAW_LEN 65536
 
 typedef struct {
   double min[MAX_TRACE_LEN]; // dBm
@@ -114,6 +115,7 @@ void* hwMain(void* arg) {
   bbStatus status;
   int exitCode = 0;
   int device;
+  int decimation, oTraceLen;
   sweep* dest;
 
   status = bbOpenDevice(&device);
@@ -124,7 +126,7 @@ void* hwMain(void* arg) {
   }
 
 
-  status = bbConfigureCenterSpan(device, centre, 1e3);
+  status = bbConfigureCenterSpan(device, centre, span);
   if (status != bbNoError) {
     fprintf(stderr, "bbConfigureCenterSpan = %d\r\n", status);
     exitCode = 1;
@@ -148,15 +150,15 @@ void* hwMain(void* arg) {
     exitCode = 1;
     goto unwindFromTg;
   }*/
-  status = bbConfigureIQ(device, 512, BB_MIN_IQ_BW);
+  /*  status = bbConfigureIQ(device, 512, BB_MIN_IQ_BW);
   if (status != bbNoError) {
     fprintf(stderr, "bbConfigureIQ = %d\r\n", status);
     exitCode = 1;
     goto unwindFromTg;
-  }
+    }*/
   status = bbInitiate(device, BB_SWEEPING, 0);
   if (status != bbNoError) {
-    fprintf(stderr, "bbInitiate(device, BB_STREAMING, BB_STREAM_IQ) = %d\r\n", status);
+    fprintf(stderr, "bbInitiate(device, BB_SWEEPING, 0) = %d\r\n", status);
     exitCode = 1;
     goto unwindFromTg;
   }
@@ -170,13 +172,41 @@ void* hwMain(void* arg) {
     exitCode = 1;
     goto unwindFromTg;
   }
-  printf("TraceLen: %d\nBinSize: %f\nActualStart: %f\n", dest->traceLen, dest->binSize, dest->actualStart);
-  if (dest->traceLen > MAX_TRACE_LEN) {
-    printf("TRACE TOO BIG!\r\n");
-    exit(1);
+  printf("BTraceLen: %d\nBinSize: %f\nActualStart: %f\n", dest->traceLen, dest->binSize, dest->actualStart);
+  oTraceLen = dest->traceLen;
+  decimation = 1;
+  while (dest->traceLen > MAX_TRACE_LEN) {
+    dest->traceLen /= 2;
+    decimation *= 2;
+    dest->binSize *= 2;
   }
+  printf("  -> After decimation of %d\nATraceLen: %d\nBinSize: %f\nActualStart: %f\n", decimation, dest->traceLen, dest->binSize, dest->actualStart);
 
-  status = bbFetchTrace(device, dest->traceLen, dest->min, dest->max);
+
+  if (decimation == 0 /* TODO: enable by using 1 */) {
+    // No decimation
+    status = bbFetchTrace(device, dest->traceLen, dest->min, dest->max);
+  } else {
+    // Decimation
+    double rawMin[MAX_RAW_LEN];
+    double rawMax[MAX_RAW_LEN];
+
+    status = bbFetchTrace(device, dest->traceLen, rawMin, rawMax);
+    if (status == bbNoError) {
+      int i, j;
+      for (i = 0; i < dest->traceLen; i++) {
+	double vmin = DBL_MAX;
+	double vmax = -DBL_MAX;
+	for (j = i * decimation; j < (i+1) * decimation && j < oTraceLen; j++) {
+	  if (rawMax[j] > vmax) vmax = rawMax[j];
+	  if (rawMin[j] < vmin) vmin = rawMin[j];
+	}
+	dest->min[i] = vmin;
+	dest->max[i] = vmax;
+	//printf("   %7f  %7f\n", dest->min[i], dest->max[i]);
+      }
+    }
+  }
   if (status != bbNoError) {
       fprintf(stderr, "bbFetchTrace = %d\r\n", status);
       exitCode = 1;
