@@ -5,53 +5,61 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-const char* vertexSource = "\
-#version 130\r\n\
-\r\n\
- \r\n\
-in vec4 position;\r\n\
-uniform vec2 windowSize;\r\n\
-uniform vec2 plotCorner;\r\n\
- \r\n\
-out vec2 plotCoord;\r\n\
- \r\n\
-void main()                                                                             \r\n\
-{                                                                                       \r\n\
-gl_Position = vec4((position.xy / windowSize)*vec2(2.0,-2.0)+vec2(-1.0,1.0), 0.0, 1.0); \r\n\
-plotCoord = vec2(position.x - plotCorner.x, plotCorner.y - position.y);                 \r\n\
-}                                                                                       \r\n\
-";
+#define SHADER_SOURCE(text) "#version 130\n" #text
 
-const char* fragmentSource = "\
-#version 130\r\n\
-#define M_PI 3.141596\r\n\
-\r\n\
-out vec4 fragColor;\r\n\
-in  vec2 plotCoord;\r\n\
-uniform sampler2D datass;\r\n\
-\r\n\
-void main()\r\n\
-{\r\n\
-    if (plotCoord.x < 0 || plotCoord.y < 0) {\
-  fragColor = vec4(0.0, 0.0, 0.2, 1.0);\
-} else {\
-//fragColor = vec4(0.0, 1.0, 0.0, 0.0);\r\n\
-fragColor = texture2D(datass, vec2(0.5, 0.5)); \r\n\
-//    fragColor = texelFetch(datass, ivec2(1,1), 0);\r\n\
-//vec4 texel = vec4(1.0, 0.0, 0.0, 0.0);\r\n\
-  //  fragColor = vec4(sin(plotCoord.x*2.03*M_PI)/2.0+0.5, cos(plotCoord.y*2.03*M_PI)/2.0+0.5, 0.0, 1.0) * vec4(texel.rrr, 1.0);\r\n\
-} \
-}\r\n\
-";
+const char* vertexSource = SHADER_SOURCE(
+  in vec4 position;
+  uniform vec2 windowSize;
+  uniform vec2 plotCorner;
+
+  out vec2 plotCoord;
+
+  void main() {
+    gl_Position = vec4((position.xy / windowSize)*vec2(2.0,-2.0)+vec2(-1.0,1.0), 0.0, 1.0);
+    plotCoord = vec2(position.x - plotCorner.x, plotCorner.y - position.y);
+  }
+);
+
+const char* fragmentSource = SHADER_SOURCE(
+  out vec4 fragColor;
+  in  vec2 plotCoord;
+  uniform sampler2D datass;
+  uniform vec2 yAxis; // plotHeight, tickSpacing  stpq
+  
+  void main() {
+    if ((plotCoord.x < 0 && plotCoord.x >= -1) || plotCoord.y < 0) {
+      fragColor = vec4(0.0, 0.6, 0.2, 1.0);
+    } else {
+      float fromRef = yAxis.s - plotCoord.y;
+      bool onGrid = mod(fromRef, yAxis.t) < 1.0;
+      if (plotCoord.x >= 0) {
+	vec2 range = texelFetch(datass, ivec2(plotCoord.x,1), 0).rg * 1024.0; // from top, small then large
+	//	range = vec2(0.125, 0.5) * 1024.0;
+	if (fromRef > range.s && fromRef < range.t) {
+	  fragColor = vec4(0.0, 1.0, 0.3, 1.0);
+	  return;
+	}
+      } 
+      	fragColor = onGrid ? vec4(0.0, 0.6, 0.2, 1.0) : vec4(0.0);
+      
+	
+      //      fragColor = vec4(sin(plotCoord.x*2.03*3.141596)*0.5+0.5, cos(plotCoord.y*2.03*3.141596)*0.5+0.5, 0.0, 1.0) * vec4(range.rrr, 1.0);
+      //
+      //vec4 texel = texelFetch(datass, ivec2(round(plotCoord.x), 1), 0);
+      //}
+    }
+  }
+);
 
 static int vs, fs, p;
 static int uWindowSize;
 static int uPlotCorner;
 static int uData;
+static int uYAxis;
 static GLuint texData;
 static GLuint sampler;
 
-static uint8_t datums[4096*4];
+
 
 static void glCompileShaderWithCheck(int shader) {
   glCompileShader(shader);
@@ -68,7 +76,7 @@ static void glCompileShaderWithCheck(int shader) {
   exit(1);
 }
 
-
+static float datums[4096*4];
 
 void setupShaders(void) {
   vs = glCreateShader(GL_VERTEX_SHADER);
@@ -88,15 +96,13 @@ void setupShaders(void) {
   uWindowSize = glGetUniformLocation(p, "windowSize");
   uPlotCorner = glGetUniformLocation(p, "plotCorner");
   uData = glGetUniformLocation(p, "datass");
-
+  uYAxis = glGetUniformLocation(p, "yAxis");
+  
   glGenTextures(1, &texData);
   glGenSamplers(1, &sampler);
 
 
-  int i;
-  for (i=0; i < 4096*4; i++) {
-    datums[i] = 0x7f;
-  }
+
 }
 
 
@@ -109,12 +115,19 @@ void displayMe(void) {
   
   glUniform2f(uWindowSize, windowWidth, windowHeight);
   glUniform2f(uPlotCorner, 50, windowHeight - 50);
+  glUniform2f(uYAxis, windowHeight-100, (windowHeight-100)/10);
 
 
   glBindTexture(GL_TEXTURE_2D, texData);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 32, 32, 0, GL_RGBA, GL_UNSIGNED_BYTE, datums);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+  int i;
+  for (i=0; i < 4096*2; i++) {
+    datums[i] = (rand() & 0xffff) / (float)(0xffff);
+  }
+  
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, 2048, 2, 0, GL_RG, GL_FLOAT, datums);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -188,7 +201,8 @@ int main(int argc, char** argv) {
 
    
 
-    glutDisplayFunc(displayMe);
+	glutDisplayFunc(displayMe);
+	//	glutIdleFunc(displayMe);
 printf("%s\r\n", glGetString(GL_VENDOR));
 printf("%s\r\n", glGetString(GL_RENDERER));
 printf("%s\r\n", glGetString(GL_VERSION));
