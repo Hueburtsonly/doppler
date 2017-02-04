@@ -1,0 +1,52 @@
+<html>
+<head>
+<style>
+body, pre {
+	font-family:  monospace;
+	font-size: 13px;
+	font-style: normal;
+	font-variant: normal;
+	font-weight: 500;
+	line-height: 16px;
+
+	color: white;
+	padding: 0px;
+	font-smooth: never;
+-webkit-font-smoothing : none;
+
+}
+	body {
+	margin: 16px;
+}
+pre {
+background-color: black;
+	display: block;
+	position: absolute;
+	margin: 0px;
+	width: 16px;
+	height: 16px;
+}
+</style>
+</head>
+<body>
+
+
+<body>
+<script>
+function prepare() {
+	var tmp = "";
+	for (var i=0; i < 256; i++) {
+	//var j=i;
+		var j=(i < 128)?i:(i-128+0x2500);
+		//tmp = tmp + "&#x" + j.toString(16) + ";";
+		//if ((i & 15) == 15) tmp = tmp + "<br/>";
+
+		tmp = tmp + "<pre style='left: " + (16 + 16*(i % 16)) + "px; top: " + (16+16*Math.floor(i / 16)) +"px;'>&#x" + j.toString(16) + ";</pre>";
+
+	}
+	document.body.innerHTML = tmp;
+}
+
+prepare();
+</script>
+</html>
