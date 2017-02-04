@@ -11,7 +11,7 @@ gui/gui.class: gui/Gui.java
 	cd gui && javac Gui.java
 
 spectrum: spectrum.cpp spectrum_cmd.cpp spectrum_hw.cpp images/monospace.h
-	g++ spectrum.cpp -o spectrum -Wl,-rpath,/usr/local/lib -lbb_api -lglut -lGL -lGLEW -lGLU
+	g++ spectrum.cpp -o spectrum -Wl,-rpath,/usr/local/lib -lbb_api -lglut -lGL -lGLEW -lGLU -lpthread
 
 runspectrum: spectrum
 	./spectrum

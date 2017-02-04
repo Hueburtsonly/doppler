@@ -31,6 +31,7 @@ double readFreq(char* s) {
       v = v * 1e6;
       break;
     case 'G':
+    case 'g':
       v = v * 1e9;
       break;
     default:
@@ -59,7 +60,7 @@ void handleCmd() {
     readback = malformed;
     return;
   }*/
-  if (cmdBuf[0] == 'c') {
+  if ((cmdBuf[0] | ' ') == 'c') {
     // Set centre
 
     double d = readFreq(cmdBuf + 1);
@@ -68,7 +69,7 @@ void handleCmd() {
     }
     return;
   }
-  if (cmdBuf[0] == 's') {
+  if ((cmdBuf[0] | ' ') == 's') {
     // Set span
     double d = readFreq(cmdBuf + 1);
     if (d > 0) {
@@ -76,7 +77,7 @@ void handleCmd() {
     }
     return;
   }
-  if (cmdBuf[0] == 'r') {
+  if ((cmdBuf[0] | ' ') == 'r') {
     // Set ref level
     double d = readFreq(cmdBuf + 1);
     if (d > -998) {
@@ -93,6 +94,7 @@ void cmdReset() {
 }
 
 void keyboardFunc(unsigned char key, int x, int y) {
+
   if (key == 8) {
     if (cmdCursor == 0) return;
     int i = --cmdCursor;
@@ -117,7 +119,33 @@ void keyboardFunc(unsigned char key, int x, int y) {
   glutPostRedisplay();
 }
 
+int specialFuncEC(int key, int x, int y) {
+  switch (key) {
+  case GLUT_KEY_LEFT:
+    setFreqCentre(centre + span / 10);
+    break;
+  case GLUT_KEY_RIGHT:
+    setFreqCentre(centre - span / 10);
+    break;
+   case GLUT_KEY_UP:
+    //cmdCursor = 0;
+    break;
+   case GLUT_KEY_DOWN:
+    //cmdCursor = strlen(cmdBuf);
+    break;
+  default:
+    return 0;
+  }
+  return 1;
+}
+
 void specialFunc(int key, int x, int y) {
+  if (cmdBuf[0] == '\0') {
+    if (specialFuncEC(key, x, y)) {
+      glutPostRedisplay();
+      return;
+    }
+  }
   switch (key) {
   case GLUT_KEY_LEFT:
     if (cmdCursor > 0) --cmdCursor;

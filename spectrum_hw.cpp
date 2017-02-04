@@ -1,14 +1,59 @@
 #include <stdlib.h>
+#include <pthread.h>
 #include "linux_bb60_sdk/include/bb_api.h"
 
 
 extern const char* readback;
 
+pthread_mutex_t mutexConfig = PTHREAD_MUTEX_INITIALIZER;
 int updateFlag = 1; // Set to 1 if updatings.
 double centre = 5.5e9; // Hz
 double span = 1e9; // Hz
 double refLevel = -10; // dBm
 
+#define MAX_TRACE_LEN 2048
+
+typedef struct {
+  double min[MAX_TRACE_LEN]; // dBm
+  double max[MAX_TRACE_LEN]; // dBm
+  unsigned int traceLen;
+  double actualStart;
+  double binSize;
+  double refLevel; // dBm
+} sweep;
+
+pthread_mutex_t mutexTrace = PTHREAD_MUTEX_INITIALIZER;
+sweep traceBuffers[3];
+int readBuffer = 0; // The buffer that is currently being read by the GUI, and therefore musn't be written to.
+int writeBuffer = -99999; // The buffer that is currently being written into by HW. Shall never be equal to readBuffer or freshestBuffer.
+int freshestBuffer = 0; // The buffer that has the freshest information, the GUI should use this buffer whenever possible.
+
+sweep* getFreshSweep(void) {
+  pthread_mutex_lock(&mutexTrace);
+  sweep* ret = traceBuffers + (readBuffer = freshestBuffer);
+  pthread_mutex_unlock(&mutexTrace);
+  return ret;
+}
+
+sweep* claimWritableSweep(void) {
+  pthread_mutex_lock(&mutexTrace);
+  // read buffer = 0, freshest buffer = 0 -> writeBuffer = 1 or 2 are equiv.
+  // read buffer = 0, freshest buffer = 1 -> writeBuffer = 2
+  int i;
+  for (i=0; i < 3; i++) {
+    if (readBuffer != i && freshestBuffer != i) break;
+  }
+  sweep* ret = traceBuffers + (writeBuffer = i);
+  pthread_mutex_unlock(&mutexTrace);
+  return ret;
+}
+
+void releaseWritableSweep(void) {
+  pthread_mutex_lock(&mutexTrace);
+  freshestBuffer = writeBuffer;
+  writeBuffer = -99998;
+  pthread_mutex_unlock(&mutexTrace);
+}
 
 void setFreqCentre(double d) {
   if (d < BB60_MIN_FREQ + 100e3) {
@@ -60,4 +105,108 @@ void setRefLevel(double d) {
     // TODO lock
     refLevel = d;
   }
+}
+
+
+void* hwMain(void* arg) {
+  // TODO: Check for temperature drift/recal.
+
+  bbStatus status;
+  int exitCode = 0;
+  int device;
+  sweep* dest;
+
+  status = bbOpenDevice(&device);
+  if (status != bbNoError) {
+    fprintf(stderr, "bbOpenDevice = %d\r\n", status);
+    exitCode = 1;
+    goto unwindFromStart;
+  }
+
+
+  status = bbConfigureCenterSpan(device, centre, 1e3);
+  if (status != bbNoError) {
+    fprintf(stderr, "bbConfigureCenterSpan = %d\r\n", status);
+    exitCode = 1;
+    goto unwindFromTg;
+  }
+  status = bbConfigureLevel(device, refLevel, -1);
+  if (status != bbNoError) {
+    fprintf(stderr, "bbConfigureLevel = %d\r\n", status);
+    exitCode = 1;
+    goto unwindFromTg;
+  }
+  status = bbConfigureGain(device, BB_AUTO_GAIN); // <------------------------------------------------------ *** *** ***
+  if (status != bbNoError) {
+    fprintf(stderr, "bbConfigureGain = %d\r\n", status);
+    exitCode = 1;
+    goto unwindFromTg;
+  }
+  /*status = bbConfigureIO(device, ((wantTg >= 2) ? BB_PORT1_EXT_REF_IN : BB_PORT1_INT_REF_OUT) | BB_PORT1_AC_COUPLED, BB_PORT2_IN_TRIGGER_RISING_EDGE);
+  if (status != bbNoError) {
+    fprintf(stderr, "bbConfigureIO = %d\r\n", status);
+    exitCode = 1;
+    goto unwindFromTg;
+  }*/
+  status = bbConfigureIQ(device, 512, BB_MIN_IQ_BW);
+  if (status != bbNoError) {
+    fprintf(stderr, "bbConfigureIQ = %d\r\n", status);
+    exitCode = 1;
+    goto unwindFromTg;
+  }
+  status = bbInitiate(device, BB_SWEEPING, 0);
+  if (status != bbNoError) {
+    fprintf(stderr, "bbInitiate(device, BB_STREAMING, BB_STREAM_IQ) = %d\r\n", status);
+    exitCode = 1;
+    goto unwindFromTg;
+  }
+
+
+  dest = claimWritableSweep();
+  dest->refLevel = refLevel;
+  status = bbQueryTraceInfo(device, &(dest->traceLen), &(dest->binSize), &(dest->actualStart));
+  if (status != bbNoError) {
+    fprintf(stderr, "bbQueryTraceInfo = %d\r\n", status);
+    exitCode = 1;
+    goto unwindFromTg;
+  }
+  printf("TraceLen: %d\nBinSize: %f\nActualStart: %f\n", dest->traceLen, dest->binSize, dest->actualStart);
+  if (dest->traceLen > MAX_TRACE_LEN) {
+    printf("TRACE TOO BIG!\r\n");
+    exit(1);
+  }
+
+  status = bbFetchTrace(device, dest->traceLen, dest->min, dest->max);
+  if (status != bbNoError) {
+      fprintf(stderr, "bbFetchTrace = %d\r\n", status);
+      exitCode = 1;
+      goto unwindFromTg;
+  }
+
+  releaseWritableSweep();
+
+  unwindFromTg:
+  unwindFromDevice:
+    bbCloseDevice(device);
+
+  unwindFromStart:
+  return (void*)exitCode;
+
+}
+
+pthread_t hwThread;
+
+void hwInit() {
+  traceBuffers[0].min[0] = -60;
+  traceBuffers[0].max[0] = -40;
+  traceBuffers[0].min[1] = -40;
+  traceBuffers[0].max[1] = -20;
+  traceBuffers[0].min[2] = -60;
+  traceBuffers[0].max[2] = -40;
+  traceBuffers[0].traceLen = 3;
+  traceBuffers[0].actualStart = 5.2e9;
+  traceBuffers[0].binSize = 0.2e9;
+  traceBuffers[0].refLevel = -0;
+
+  pthread_create(&hwThread, NULL, hwMain, NULL);
 }

@@ -28,16 +28,16 @@ const char* plotFragmentSource = SHADER_SOURCE(
   out vec4 fragColor;
   in  vec2 relative;
   uniform sampler2D data;
-  uniform vec2 yAxis; // plotHeight, tickSpacing  stpq
+  uniform vec4 axes; // plotHeight, tickSpacing, binOffset, invBinWidth  stpq
 
   void main() {
     if ((relative.x < 0 && relative.x >= -1) || relative.y < 0) {
       fragColor = vec4(0.0, 0.6, 0.2, 1.0);
     } else {
-      float fromRef = yAxis.s - relative.y;
-      bool onGrid = mod(fromRef, yAxis.t) < 1.0;
+      float fromRef = axes.s - relative.y;
+      bool onGrid = mod(fromRef, axes.t) < 1.0;
       if (relative.x >= 0) {
-  vec2 range = texelFetch(data, ivec2(relative.x,1), 0).rg * 1024.0; // from top, small then large
+  vec2 range = texelFetch(data, ivec2(floor(relative.x * axes.q + axes.p),0), 0).rg * axes.t; // small then large
   //  range = vec2(0.125, 0.5) * 1024.0;
   if (fromRef > range.s && fromRef < range.t) {
     fragColor = vec4(0.0, 1.0, 0.3, 1.0);
@@ -85,7 +85,7 @@ static int pPlot, pText;
 static int upWindowSize;
 static int upOrigin;
 static int upData;
-static int upYAxis;
+static int upAxes;
 static int utWindowSize;
 static int utOrigin;
 static int utFont;
@@ -111,7 +111,7 @@ static void glCompileShaderWithCheck(int shader) {
   exit(1);
 }
 
-static float datums[4096*4];
+
 
 void setupShaders(void) {
   int vs, pfs, tfs;
@@ -135,7 +135,7 @@ void setupShaders(void) {
   upWindowSize = glGetUniformLocation(pPlot, "windowSize");
   upOrigin = glGetUniformLocation(pPlot, "origin");
   upData = glGetUniformLocation(pPlot, "data");
-  upYAxis = glGetUniformLocation(pPlot, "yAxis");
+  upAxes = glGetUniformLocation(pPlot, "axes");
   glGenTextures(1, &texData);
   glGenSamplers(1, &sampler);
 
@@ -177,16 +177,16 @@ void drawText(int x, int y, const char* text, int len, int borders, int bordert,
 
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, texFont);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glUniform1i(utFont, 1);
 
   glActiveTexture(GL_TEXTURE2);
   glBindTexture(GL_TEXTURE_1D, texText);
-  glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
@@ -254,9 +254,6 @@ void displayMe(void) {
 glEnable(GL_BLEND);
 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-
-
-
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();
   glOrtho(0.0f, windowWidth, windowHeight, 0.0f, -1.0f, 1.0f);
@@ -272,20 +269,35 @@ glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glUseProgram(pPlot);
   glUniform2f(upWindowSize, windowWidth, windowHeight);
   glUniform2f(upOrigin, 50, windowHeight - 50);
-  glUniform2f(upYAxis, windowHeight-100, (windowHeight-100)/10);
 
   glBindTexture(GL_TEXTURE_2D, texData);
 
-  int i;
-  for (i=0; i < 4096*2; i++) {
-    datums[i] = (rand() & 0xffff) / (float)(0xffff);
-  }
 
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, 2048, 2, 0, GL_RG, GL_FLOAT, datums);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  static float datums[MAX_TRACE_LEN*2];
+
+  sweep* src = getFreshSweep();
+
+  // binOffset, invBinWidth
+  glUniform4f(upAxes, windowHeight-100, (windowHeight-100)/10, ((centre-span/2)-src->actualStart)/src->binSize, span / (src->binSize * (windowWidth-100)));
+
+
+  int i;
+  for (i=0; i < (src->traceLen) * 2; i += 2) {
+    datums[i+1] = (float)(src->refLevel-src->min[i>>1]) * 0.1f;
+    datums[i] = (float)(src->refLevel-src->max[i>>1]) * 0.1f;
+    //printf("  %f\n", datums[i]);
+    //printf("  %f\n", datums[i+1]);
+  }
+  for (i=0; i < 60 * 2; i++ ) {
+    //datums[i] = (rand() & 0xffff) / (float)(0xffff);
+  }
+  //printf("sTraceLen: %d\n", src->traceLen);
+
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, MAX_TRACE_LEN, 1, 0, GL_RG, GL_FLOAT, datums);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
   glBindTexture(GL_TEXTURE_2D, 0);
 
 
@@ -309,8 +321,8 @@ glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   sprintf(spanBuf, "Centre:%12.9f GHz   Start:%12.9f GHz\n  Span:%12.9f GHz    Stop:%12.9f GHz\n", centre / 1e9, (centre - span/2)/1e9, span / 1e9, (centre + span/2)/1e9);
   drawTextBlock(windowWidth / 2, windowHeight - 15, spanBuf, 0);
 
-  sprintf(spanBuf, "Ref: %5.1f dBm\n", refLevel);
-  drawTextBlock(windowWidth / 2, 31, spanBuf, 0);
+  sprintf(spanBuf, "Ref: %5.1f dBm  10 dB/div\n", src->refLevel);
+  drawTextBlock(49, 48, spanBuf, 0);
 
   int cmdLen = strlen(cmdBuf);
   if (readback) {
@@ -326,7 +338,7 @@ glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 int main(int argc, char** argv) {
 
-  cmdReset();
+
 
   glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE);
@@ -369,6 +381,9 @@ printf("%s\r\n", glGetString(GL_RENDERER));
 printf("%s\r\n", glGetString(GL_VERSION));
 printf("%s\r\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
   printf("%s\r\n", glGetString(GL_EXTENSIONS));
+
+cmdReset();
+hwInit();
 
     usleep(50000);
     system("wmctrl -r :ACTIVE: -b add,maximized_vert,maximized_horz");
