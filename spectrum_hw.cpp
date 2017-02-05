@@ -21,6 +21,10 @@ float calTemperature = -FLT_MAX;
 float temperature = -FLT_MAX;
 float usbVoltage = -FLT_MAX;
 float usbCurrent = -FLT_MAX;
+volatile int enabled = 1;
+volatile int quitting = 0;
+volatile int safeToExit = 0;
+volatile int singleShot = 0;
 
 extern const char* readback;
 
@@ -31,15 +35,16 @@ double span = 1e9; // Hz
 double refLevel = -10; // dBm
 
 #define MAX_TRACE_LEN 2048
-#define MAX_RAW_LEN 65536
+#define MAX_RAW_LEN 524288
 
 typedef struct {
-  double min[MAX_TRACE_LEN]; // dBm
-  double max[MAX_TRACE_LEN]; // dBm
+  float min[MAX_TRACE_LEN]; // dBm
+  float max[MAX_TRACE_LEN]; // dBm
   unsigned int traceLen;
   double actualStart;
   double binSize;
   double refLevel; // dBm
+  bool overflow;
 } sweep;
 
 pthread_mutex_t mutexTrace = PTHREAD_MUTEX_INITIALIZER;
@@ -144,7 +149,12 @@ void* hwMain(void* arg) {
     goto unwindFromStart;
   }
 
-  for (;;) {
+  while (!quitting) {
+    while (!enabled && !singleShot) {
+      usleep(50000);
+      if (quitting) goto unwindFromTg;
+    }
+    singleShot = 0;
     { // lock scope
       MutexLock egg(&mutexConfig);
       if (updateFlag) {
@@ -198,27 +208,35 @@ void* hwMain(void* arg) {
       exitCode = 1;
       goto unwindFromTg;
     }
-    printf("BTraceLen: %d\nBinSize: %f\nActualStart: %f\n", dest->traceLen, dest->binSize, dest->actualStart);
+    //printf("BTraceLen: %d\nBinSize: %f\nActualStart: %f\n", dest->traceLen, dest->binSize, dest->actualStart);
     oTraceLen = dest->traceLen;
+    if (oTraceLen > MAX_RAW_LEN) {
+      printf("Raw trace too large: %d.\r\n", oTraceLen);
+      goto unwindFromTg;
+    }
     decimation = 1;
     while (dest->traceLen > MAX_TRACE_LEN) {
       dest->traceLen /= 2;
       decimation *= 2;
       dest->binSize *= 2;
     }
-    printf("  -> After decimation of %d\nATraceLen: %d\nBinSize: %f\nActualStart: %f\n", decimation, dest->traceLen, dest->binSize, dest->actualStart);
+    //printf("  -> After decimation of %d\nATraceLen: %d\nBinSize: %f\nActualStart: %f\n", decimation, dest->traceLen, dest->binSize, dest->actualStart);
 
 
     if (decimation == 0 /* TODO: enable by using 1 */) {
       // No decimation
-      status = bbFetchTrace(device, dest->traceLen, dest->min, dest->max);
+      status = bbFetchTrace_32f(device, dest->traceLen, dest->min, dest->max);
     } else {
       // Decimation
-      double rawMin[MAX_RAW_LEN];
-      double rawMax[MAX_RAW_LEN];
+      static float rawMin[MAX_RAW_LEN];
+      static float rawMax[MAX_RAW_LEN];
 
-      status = bbFetchTrace(device, dest->traceLen, rawMin, rawMax);
-      if (status == bbNoError) {
+      for (;;) {
+	status = bbFetchTrace_32f(device, dest->traceLen, rawMin, rawMax);
+	if (status != 8) break;
+	printf("ERROR 8 IGNORED\n");
+      }
+      if (status == bbNoError || status == bbADCOverflow) {
         int i, j;
         for (i = 0; i < dest->traceLen; i++) {
           double vmin = DBL_MAX;
@@ -233,11 +251,12 @@ void* hwMain(void* arg) {
         }
       }
     }
-    if (status != bbNoError) {
+    if (status != bbNoError && status != bbADCOverflow) {
         fprintf(stderr, "bbFetchTrace = %d\r\n", status);
         exitCode = 1;
         goto unwindFromTg;
     }
+    dest->overflow = status == bbADCOverflow;
 
     releaseWritableSweep();
 
@@ -255,13 +274,22 @@ void* hwMain(void* arg) {
     }
   }
 
-  unwindFromTg:
-  unwindFromDevice:
-    bbCloseDevice(device);
+ unwindFromTg:
+ unwindFromDevice:
+  bbCloseDevice(device);
 
-  unwindFromStart:
+ unwindFromStart:
+  printf("BB60C closed.\r\n");
+  safeToExit = 1;
   return NULL;
+}
 
+void hwExit() {
+  quitting = 1;
+  while (!safeToExit) {
+    usleep(50000);
+  }
+  printf("Goodbye!\r\n");  
 }
 
 pthread_t hwThread;

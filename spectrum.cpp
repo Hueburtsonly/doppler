@@ -249,11 +249,18 @@ void displayMe(void) {
   static float datums[MAX_TRACE_LEN*2];
   sweep* src = getFreshSweep();
   glUniform4f(upAxes, windowHeight-100, (windowHeight-100)/10, ((centre-span/2)-src->actualStart)/src->binSize, span / (src->binSize * (windowWidth-100)));
-
+  double totMinMw = 0.0;
+  double totMaxMw = 0.0;
   int i;
   for (i=0; i < (src->traceLen) * 2; i += 2) {
     datums[i+1] = (float)(src->refLevel-src->min[i>>1]) * 0.1f + 1.0f;
     datums[i] = (float)(src->refLevel-src->max[i>>1]) * 0.1f + 1.0f;
+
+    totMinMw += pow(10, src->min[i>>1] * 0.1);
+    totMaxMw += pow(10, src->max[i>>1] * 0.1);
+  }
+  for (i = (src->traceLen) * 2; i < MAX_TRACE_LEN*2; i++) {
+    datums[i] = 0.0f;
   }
   //printf("midTrace: %f   %f\n", datums[(src->traceLen/2)*2], datums[(src->traceLen/2)*2+1]);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, MAX_TRACE_LEN, 1, 0, GL_RG, GL_FLOAT, datums);
@@ -271,9 +278,14 @@ void displayMe(void) {
   drawTextBlock(windowWidth / 2, windowHeight - 15, spanBuf, 0);
 
   // Reference level display
-  sprintf(spanBuf, "Ref: %5.1f dBm  10 dB/div\n", src->refLevel);
+  sprintf(spanBuf, "Ref: %5.1f dBm  10 dB/div  Span total: %5.1f dBm -- %5.1f dBm\n", src->refLevel, log10(totMinMw) * 10.0, log10(totMaxMw) * 10.0);
   drawTextBlock(49, 48, spanBuf, 0);
 
+  // Overflow warning
+  if (src->overflow) {
+    drawTextBlock(windowWidth - 200, 30, "ADC OVERFLOW\n", 0);
+  }
+  
   // Diagnostics display
   if (temperature != -FLT_MAX && usbVoltage != -FLT_MAX && usbCurrent != -FLT_MAX) {
     sprintf(spanBuf, "%5.2fC  %5.3fV  %5.1fmA\n", temperature, usbVoltage, usbCurrent);
@@ -298,7 +310,7 @@ int main(int argc, char** argv) {
     glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE);
     glutInitWindowSize(1000, 700);
     glutInitWindowPosition(0, 0);
-    glutCreateWindow("Teh awesomes");
+    glutCreateWindow("Spectrum");
   glewInit();
 
   glutDisplayFunc(displayMe);
@@ -321,8 +333,7 @@ int main(int argc, char** argv) {
   setupShaders();
 
   glutMainLoop();
+  hwExit();
+  
   return 0;
 }
-
-
-

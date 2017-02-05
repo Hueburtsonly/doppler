@@ -1,3 +1,5 @@
+#include <GL/glut.h>
+
 #include "spectrum_hw.cpp"
 
 int cmdCursor = 0;
@@ -5,8 +7,19 @@ int cmdCursor = 0;
 char cmdBuf[81];
 
 const char* const help = "\
-Here comes some helps!\n\n\
-And another line.\n\
+Hotkeys:                              \n\
+  Left/Right: Change centre frequency.\n\
+  Up/Down:    Change reference level. \n\
+  +/-:        Change span.            \n\
+  \\:          Single-shot capture.    \n\
+                                      \n\
+Commands:                             \n\
+  ? :     Display this help           \n\
+  c ... : Change centre frequency.    \n\
+  s ... : Change span.                \n\
+  r ... : Change reference level.     \n\
+  e :     Pause/resume sweep.         \n\
+  q :     Quit.                       \n\
 ";
 
 const char* const malformed = "Unknown command. Enter '?' for help.\n";
@@ -84,6 +97,15 @@ void handleCmd() {
     }
     return;
   }
+  if ((cmdBuf[0] | ' ') == 'q' && cmdBuf[1] == '\0') {
+    hwExit();
+    exit(0);
+    return;
+  }
+  if ((cmdBuf[0] | ' ') == 'e' && cmdBuf[1] == '\0') {
+    enabled = !enabled;
+    return;
+  }
   readback = malformed;
 }
 
@@ -92,8 +114,32 @@ void cmdReset() {
   cmdCursor = 0;
 }
 
-void keyboardFunc(unsigned char key, int x, int y) {
+int keyboardFuncEC(unsigned char key, int x, int y) {
+  switch (key) {
+  case '+':
+  case '=':
+     setFreqSpan(span / 2);
+     break;
+  case '-':
+  case '_':
+     setFreqSpan(span * 2);
+     break;
+  case '\\':
+    singleShot = 1;
+    break;
+  default:
+    return 0;
+  }
+  return 1;
+}
 
+void keyboardFunc(unsigned char key, int x, int y) {
+  if (cmdBuf[0] == '\0') {
+    if (keyboardFuncEC(key, x, y)) {
+      glutPostRedisplay();
+      return;
+    }
+  }
   if (key == 8) {
     if (cmdCursor == 0) return;
     int i = --cmdCursor;
@@ -121,16 +167,16 @@ void keyboardFunc(unsigned char key, int x, int y) {
 int specialFuncEC(int key, int x, int y) {
   switch (key) {
   case GLUT_KEY_LEFT:
-    setFreqCentre(centre + span / 10);
-    break;
-  case GLUT_KEY_RIGHT:
     setFreqCentre(centre - span / 10);
     break;
+  case GLUT_KEY_RIGHT:
+    setFreqCentre(centre + span / 10);
+    break;
    case GLUT_KEY_UP:
-    setRefLevel(refLevel - 10);
+    setRefLevel(refLevel + 10);
     break;
    case GLUT_KEY_DOWN:
-    setRefLevel(refLevel + 10);
+    setRefLevel(refLevel - 10);
     break;
   default:
     return 0;
