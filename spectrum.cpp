@@ -1,12 +1,12 @@
 #include <GL/glew.h>
 #include <GL/glut.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "images/monospace.h"
 
+#include "images/monospace.h"
 #include "spectrum_cmd.cpp"
 
 #define SHADER_SOURCE(text) "#version 130\n" #text
@@ -37,20 +37,13 @@ const char* plotFragmentSource = SHADER_SOURCE(
       float fromRef = axes.s - relative.y;
       bool onGrid = mod(fromRef, axes.t) < 1.0;
       if (relative.x >= 0) {
-  vec2 range = texelFetch(data, ivec2(floor(relative.x * axes.q + axes.p),0), 0).rg * axes.t; // small then large
-  //  range = vec2(0.125, 0.5) * 1024.0;
-  if (fromRef > (range.s-1.0) && fromRef < range.t) {
-    fragColor = vec4(0.0, 1.0, 0.3, 1.0);
-    return;
-  }
+        vec2 range = (texelFetch(data, ivec2(floor(relative.x * axes.q + axes.p),0), 0).rg - 1.0) * axes.t + 1.0; // small then large
+        if (fromRef > (range.s-1.0) && fromRef < range.t) {
+          fragColor = vec4(0.0, 1.0, 0.3, 1.0);
+          return;
+        }
       }
-        fragColor = onGrid ? vec4(0.0, 0.6, 0.2, 1.0) : vec4(0.0);
-
-
-      //      fragColor = vec4(sin(relative.x*2.03*3.141596)*0.5+0.5, cos(relative.y*2.03*3.141596)*0.5+0.5, 0.0, 1.0) * vec4(range.rrr, 1.0);
-      //
-      //vec4 texel = texelFetch(data, ivec2(round(relative.x), 1), 0);
-      //}
+      fragColor = onGrid ? vec4(0.0, 0.6, 0.2, 1.0) : vec4(0.0);
     }
   }
 );
@@ -77,7 +70,6 @@ const char* textFragmentSource = SHADER_SOURCE(
       return;
     }
     fragColor = texelFetch(font, ivec2(16*cx + px, 16*cy + int(fromRef)), 0).rrrr + vec4(0.1, 0.2, 0.3, 0.7);
-    //fragColor = vec4(relative.xy * 0.1, 0.0, 1.0);
   }
 );
 
@@ -94,14 +86,11 @@ static int utParams;
 static GLuint texData, texFont, texText;
 static GLuint sampler;
 
-
-
 static void glCompileShaderWithCheck(int shader) {
   glCompileShader(shader);
   GLint status;
   glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
   if (status == GL_TRUE) {
-    printf("Compile successful.\r\n");
     return;
   }
   char buf[2000];
@@ -110,8 +99,6 @@ static void glCompileShaderWithCheck(int shader) {
   printf("Compile failed:\r\n\r\n%s\r\n\r\n", buf);
   exit(1);
 }
-
-
 
 void setupShaders(void) {
   int vs, pfs, tfs;
@@ -138,7 +125,6 @@ void setupShaders(void) {
   upAxes = glGetUniformLocation(pPlot, "axes");
   glGenTextures(1, &texData);
   glGenSamplers(1, &sampler);
-
 
   pText = glCreateProgram();
   glAttachShader(pText, vs);
@@ -194,24 +180,19 @@ void drawText(int x, int y, const char* text, int len, int borders, int bordert,
   memset(buf, 0, 128);
   strncpy(buf, text, 128);
 
-
   glTexImage1D(GL_TEXTURE_1D, 0, GL_R8, 128, 0, GL_RED, GL_UNSIGNED_BYTE, buf);
   glUniform1i(utText, 2);
 
-
-
-  glBegin(GL_POLYGON);
   float x1 = x - borders;
   float x2 = x + len * FW + borders;
   float y1 = y + borderb;
   float y2 = y - FH - bordert;
+  glBegin(GL_POLYGON);
     glVertex3f(x1, y1, 0.0);
     glVertex3f(x2, y1, 0.0);
     glVertex3f(x2, y2, 0.0);
     glVertex3f(x1, y2, 0.0);
-    glEnd();
-
-
+  glEnd();
 }
 
 void drawTextBlock(int x, int y, const char* block, int border) {
@@ -233,11 +214,9 @@ void drawTextBlock(int x, int y, const char* block, int border) {
     it = nit + 1;
   }
   if (*it != '\0') {
-
     printf("Num lines = %d\r\n", numLines);
     printf("strlen = %ld\r\n", strlen(block));
     printf("it-block = %ld\r\n", it-block);
-
     drawText(x, y, "MISSING LINE TERM", 17, 0, 0, 0, -1);
   }
 }
@@ -246,84 +225,62 @@ void displayMe(void) {
   windowHeight = glutGet(GLUT_WINDOW_HEIGHT);
   windowWidth = glutGet(GLUT_WINDOW_WIDTH);
 
-  // ------------------ onResize above
-
-
-
-
-glEnable(GL_BLEND);
-glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-  glMatrixMode(GL_PROJECTION);
-  glLoadIdentity();
-  glOrtho(0.0f, windowWidth, windowHeight, 0.0f, -1.0f, 1.0f);
-
-  glMatrixMode(GL_MODELVIEW);
-  glLoadIdentity();
-  glTranslatef(100.45, 100.45, 0);
-
-
   glClear(GL_COLOR_BUFFER_BIT);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-
+  // Plot display
   glUseProgram(pPlot);
   glUniform2f(upWindowSize, windowWidth, windowHeight);
   glUniform2f(upOrigin, 50, windowHeight - 50);
-
-  glBindTexture(GL_TEXTURE_2D, texData);
-
-
-  static float datums[MAX_TRACE_LEN*2];
-
-  sweep* src = getFreshSweep();
-
-  // binOffset, invBinWidth
-  glUniform4f(upAxes, windowHeight-100, (windowHeight-100)/10, ((centre-span/2)-src->actualStart)/src->binSize, span / (src->binSize * (windowWidth-100)));
-
-
-  int i;
-  for (i=0; i < (src->traceLen) * 2; i += 2) {
-    datums[i+1] = (float)(src->refLevel-src->min[i>>1]) * 0.1f;
-    datums[i] = (float)(src->refLevel-src->max[i>>1]) * 0.1f;
-    //printf("  %f\n", datums[i]);
-    //printf("  %f\n", datums[i+1]);
-  }
-  for (i=0; i < 60 * 2; i++ ) {
-    //datums[i] = (rand() & 0xffff) / (float)(0xffff);
-  }
-  printf("midTrace: %f   %f\n", datums[(src->traceLen/2)*2], datums[(src->traceLen/2)*2+1]);
-
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, MAX_TRACE_LEN, 1, 0, GL_RG, GL_FLOAT, datums);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-  glBindTexture(GL_TEXTURE_2D, 0);
-
-
+  glUniform1i(upData, 0);
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, texData);
-  glUniform1i(upData, 0);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-  glBegin(GL_POLYGON);
   float x1 = 49 - 10;
   float x2 = windowWidth - 49;
   float y1 = 49;
   float y2 = windowHeight - 49;
+
+  static float datums[MAX_TRACE_LEN*2];
+  sweep* src = getFreshSweep();
+  glUniform4f(upAxes, windowHeight-100, (windowHeight-100)/10, ((centre-span/2)-src->actualStart)/src->binSize, span / (src->binSize * (windowWidth-100)));
+
+  int i;
+  for (i=0; i < (src->traceLen) * 2; i += 2) {
+    datums[i+1] = (float)(src->refLevel-src->min[i>>1]) * 0.1f + 1.0f;
+    datums[i] = (float)(src->refLevel-src->max[i>>1]) * 0.1f + 1.0f;
+  }
+  //printf("midTrace: %f   %f\n", datums[(src->traceLen/2)*2], datums[(src->traceLen/2)*2+1]);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, MAX_TRACE_LEN, 1, 0, GL_RG, GL_FLOAT, datums);
+
+  glBegin(GL_POLYGON);
     glVertex3f(x1, y1, 0.0);
     glVertex3f(x2, y1, 0.0);
     glVertex3f(x2, y2, 0.0);
     glVertex3f(x1, y2, 0.0);
   glEnd();
 
-
+  // Frequency display
   char spanBuf[160];
   sprintf(spanBuf, "Centre:%12.9f GHz   Start:%12.9f GHz\n  Span:%12.9f GHz    Stop:%12.9f GHz\n", centre / 1e9, (centre - span/2)/1e9, span / 1e9, (centre + span/2)/1e9);
   drawTextBlock(windowWidth / 2, windowHeight - 15, spanBuf, 0);
 
+  // Reference level display
   sprintf(spanBuf, "Ref: %5.1f dBm  10 dB/div\n", src->refLevel);
   drawTextBlock(49, 48, spanBuf, 0);
 
+  // Diagnostics display
+  if (temperature != -FLT_MAX && usbVoltage != -FLT_MAX && usbCurrent != -FLT_MAX) {
+    sprintf(spanBuf, "%5.2fC  %5.3fV  %5.1fmA\n", temperature, usbVoltage, usbCurrent);
+    drawTextBlock(windowWidth / 2, 30, spanBuf, 0);
+  }
+
+  // Readback & prompt display
   int cmdLen = strlen(cmdBuf);
   if (readback) {
     drawTextBlock(15, windowHeight - 45, readback, 5);
@@ -337,9 +294,6 @@ glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
 int main(int argc, char** argv) {
-
-
-
   glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE);
     glutInitWindowSize(1000, 700);
@@ -347,51 +301,27 @@ int main(int argc, char** argv) {
     glutCreateWindow("Teh awesomes");
   glewInit();
 
-
-
-   if (glewIsSupported("GL_VERSION_3_3"))
-        printf("Ready for OpenGL 3.3\n");
-    else {
-        printf("OpenGL 3.3 not supported\n");
-        //exit(1);
-    }
-  if (GLEW_ARB_fragment_shader)
-    printf("Ready for GLSL\n");
-  else {
-    printf("Not totally ready :( \n");
-    exit(1);
-  }
-
-  if (glewIsSupported("GL_VERSION_2_0"))
-    printf("Ready for OpenGL 2.0\n");
-  else {
-    printf("OpenGL 2.0 not supported\n");
-    exit(1);
-  }
-
-
-
   glutDisplayFunc(displayMe);
-   glutIdleFunc(displayMe);
+  glutIdleFunc(displayMe);
 
   glutKeyboardFunc(keyboardFunc);
   glutSpecialFunc(specialFunc);
-printf("%s\r\n", glGetString(GL_VENDOR));
-printf("%s\r\n", glGetString(GL_RENDERER));
-printf("%s\r\n", glGetString(GL_VERSION));
-printf("%s\r\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
-  printf("%s\r\n", glGetString(GL_EXTENSIONS));
+  //printf("%s\r\n", glGetString(GL_VENDOR));
+  //printf("%s\r\n", glGetString(GL_RENDERER));
+  //printf("%s\r\n", glGetString(GL_VERSION));
+  //printf("%s\r\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
+  //printf("%s\r\n", glGetString(GL_EXTENSIONS));
 
-cmdReset();
-hwInit();
+  cmdReset();
+  hwInit();
 
-    usleep(50000);
-    system("wmctrl -r :ACTIVE: -b add,maximized_vert,maximized_horz");
+  usleep(50000);
+  system("wmctrl -r :ACTIVE: -b add,maximized_vert,maximized_horz");
 
-    setupShaders();
+  setupShaders();
 
-    glutMainLoop();
-    return 0;
+  glutMainLoop();
+  return 0;
 }
 
 

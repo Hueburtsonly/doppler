@@ -1,4 +1,3 @@
-
 #include "spectrum_hw.cpp"
 
 int cmdCursor = 0;
@@ -128,10 +127,10 @@ int specialFuncEC(int key, int x, int y) {
     setFreqCentre(centre - span / 10);
     break;
    case GLUT_KEY_UP:
-    //cmdCursor = 0;
+    setRefLevel(refLevel - 10);
     break;
    case GLUT_KEY_DOWN:
-    //cmdCursor = strlen(cmdBuf);
+    setRefLevel(refLevel + 10);
     break;
   default:
     return 0;
