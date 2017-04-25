@@ -19,11 +19,15 @@ Commands:                             \n\
   s ... : Change span.                \n\
   r ... : Change reference level.     \n\
   e :     Pause/resume sweep.         \n\
+  l :     Toggle logging.             \n\
+  / ... : Add comment.                \n\
   q :     Quit.                       \n\
 ";
 
 const char* const malformed = "Unknown command. Enter '?' for help.\n";
 const char* const badFreq = "Bad frequency. Must be double, followed by optional k, M or G.\n";
+const char* const loggingDisabled = "Logging disabled.\n";
+const char* const loggingEnabled = "Logging enabled.\n";
 
 const char* readback = 0;
 
@@ -97,6 +101,13 @@ void handleCmd() {
     }
     return;
   }
+  if (cmdBuf[0] == '/') {
+    // Log comment
+    static char commentBuf[80];
+    strncpy(commentBuf, cmdBuf + 1, 75);
+    logComment = commentBuf;
+    return;
+  }
   if ((cmdBuf[0] | ' ') == 'q' && cmdBuf[1] == '\0') {
     hwExit();
     exit(0);
@@ -104,6 +115,12 @@ void handleCmd() {
   }
   if ((cmdBuf[0] | ' ') == 'e' && cmdBuf[1] == '\0') {
     enabled = !enabled;
+    logging = false;
+    return;
+  }
+  if ((cmdBuf[0] | ' ') == 'l' && cmdBuf[1] == '\0') {
+    logging = enabled && !logging;
+    readback = logging ? loggingEnabled : loggingDisabled;
     return;
   }
   readback = malformed;

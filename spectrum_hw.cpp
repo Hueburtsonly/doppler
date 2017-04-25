@@ -22,6 +22,8 @@ float temperature = -FLT_MAX;
 float usbVoltage = -FLT_MAX;
 float usbCurrent = -FLT_MAX;
 volatile int enabled = 1;
+volatile int logging = 0;
+volatile char* logComment = 0;
 volatile int quitting = 0;
 volatile int safeToExit = 0;
 volatile int singleShot = 0;
@@ -45,6 +47,7 @@ typedef struct {
   double binSize;
   double refLevel; // dBm
   bool overflow;
+  int index;
 } sweep;
 
 pthread_mutex_t mutexTrace = PTHREAD_MUTEX_INITIALIZER;
@@ -140,6 +143,7 @@ void* hwMain(void* arg) {
   int exitCode = 0;
   int device;
   int decimation, oTraceLen;
+  int sweepCounter = 0;
   sweep* dest;
 
   status = bbOpenDevice(&device);
@@ -201,6 +205,7 @@ void* hwMain(void* arg) {
     pthread_mutex_unlock(&mutexConfig);
 
     dest = claimWritableSweep();
+    dest->index = sweepCounter++;
     dest->refLevel = refLevel;
     status = bbQueryTraceInfo(device, &(dest->traceLen), &(dest->binSize), &(dest->actualStart));
     if (status != bbNoError) {
@@ -308,3 +313,32 @@ void hwInit() {
 
   pthread_create(&hwThread, NULL, hwMain, NULL);
 }
+
+// Channel Name, Band lower limit, Band upper limit
+static const int wifiChannels[22][3] = {
+  {36, 5170, 5190},
+  {40, 5190, 5210},
+  {44, 5210, 5230},
+  {48, 5230, 5250},
+  {52, 5250, 5270},
+  {56, 5270, 5290},
+  {60, 5290, 5310},
+  {64, 5310, 5330},
+  {100, 5490, 5510},
+  {104, 5510, 5530},
+  {108, 5530, 5550},
+  {112, 5550, 5570},
+  {116, 5570, 5590},
+  {132, 5650, 5670},
+  {136, 5670, 5690},
+  {140, 5690, 5710},
+  {144, 5710, 5730},
+  {149, 5735, 5755},
+  {153, 5755, 5775},
+  {157, 5775, 5795},
+  {161, 5795, 5815},
+  {165, 5815, 5835}
+};
+
+#define WIFI_N 22
+//(sizeof(wifiChannels)/sizeof(wifiChannels[0]))

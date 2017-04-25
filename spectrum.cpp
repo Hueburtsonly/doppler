@@ -221,6 +221,13 @@ void drawTextBlock(int x, int y, const char* block, int border) {
   }
 }
 
+#include <stdio.h>
+#include <time.h>
+
+static int prevLogging = 0;
+static int prevSweepIndex = 0;
+static FILE* fileLog;
+
 void displayMe(void) {
   windowHeight = glutGet(GLUT_WINDOW_HEIGHT);
   windowWidth = glutGet(GLUT_WINDOW_WIDTH);
@@ -252,16 +259,74 @@ void displayMe(void) {
   double totMinMw = 0.0;
   double totMaxMw = 0.0;
   int i;
-  for (i=0; i < (src->traceLen) * 2; i += 2) {
+  
+  double bandMinMw[WIFI_N];
+  double bandMaxMw[WIFI_N];
+  for (i = 0; i < WIFI_N; i++) {
+    bandMinMw[i] = 0;
+    bandMaxMw[i] = 0;
+  }
+  
+  int wifiIndex = 0;
+  for (i = 0; i < (src->traceLen) * 2; i += 2) {
     datums[i+1] = (float)(src->refLevel-src->min[i>>1]) * 0.1f + 1.0f;
     datums[i] = (float)(src->refLevel-src->max[i>>1]) * 0.1f + 1.0f;
 
-    totMinMw += pow(10, src->min[i>>1] * 0.1);
-    totMaxMw += pow(10, src->max[i>>1] * 0.1);
+    double binMinMw = pow(10, src->min[i>>1] * 0.1);
+    double binMaxMw = pow(10, src->max[i>>1] * 0.1);
+    
+    totMinMw += binMinMw;
+    totMaxMw += binMaxMw;
+
+    double actualFreq = (src->actualStart + (i>>1) * src->binSize) * 1e-6;
+    
+    while (wifiIndex < WIFI_N && wifiChannels[wifiIndex][2] < actualFreq) {
+      ++wifiIndex;
+    }
+    if (wifiIndex < WIFI_N && wifiChannels[wifiIndex][1] < actualFreq) {
+      bandMinMw[wifiIndex] += binMinMw;
+      bandMaxMw[wifiIndex] += binMaxMw;
+    }
   }
   for (i = (src->traceLen) * 2; i < MAX_TRACE_LEN*2; i++) {
     datums[i] = 0.0f;
   }
+
+  if (prevSweepIndex != src->index) {
+    if (logging) {
+      if (!prevLogging) {
+	time_t t;
+	struct tm* tmp;
+	char filename[80];
+	
+	t = time(NULL);
+	tmp = localtime(&t);
+	strftime(filename, sizeof(filename), "%Y%m%d-%H%M%S.csv", tmp);
+	
+	fileLog = fopen(filename, "w");
+	fprintf(fileLog, "\"Total (mW)\"");
+	for (i = 0; i < WIFI_N; i++) {
+	  fprintf(fileLog, ", \"Band %d\"", (wifiChannels[i][1]+wifiChannels[i][2])/2);
+	}
+	fprintf(fileLog, ", \"Comment\"\r\n");
+	//printf("Wrote header line\r\n");
+      }
+      fprintf(fileLog, "%e", totMaxMw);
+      for (i = 0; i < WIFI_N; i++) {
+	fprintf(fileLog, ", %e", bandMaxMw[i]);
+      }
+      fprintf(fileLog, ", \"%s\"\r\n", logComment ? logComment : "");
+      logComment = 0;
+    } else {
+      if (prevLogging) {
+	fclose(fileLog);
+      }
+    }
+    prevSweepIndex = src->index;
+    prevLogging = logging;
+  }
+  
+  
   //printf("midTrace: %f   %f\n", datums[(src->traceLen/2)*2], datums[(src->traceLen/2)*2+1]);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, MAX_TRACE_LEN, 1, 0, GL_RG, GL_FLOAT, datums);
 
