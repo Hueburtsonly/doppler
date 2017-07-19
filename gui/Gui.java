@@ -56,15 +56,16 @@ public class Gui extends JPanel {
 		g.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 18));
 		int by = toph + (height-21-toph)/2;
 		int sy = (height-21-toph)/2;
-		int wavwidth = 300;
+		int wavwidth = 800;
 		final int N = width - 110 - 20;
 		g.drawLine(20, by, width - 110, by);
 		g.drawLine(20, by-sy, 20, by+sy);
 		for (boolean k = false; ; k = true) {
+k=true;
 			// lambda = c / f
 			// mm     = mm / s  / (1/s)
-			final double stride = k ? (wavwidth * 200 / (1e12 / freq)) : (wavwidth * 100 / (c / freq));
-			final double val = k ? 200 : 100;
+			final double stride = k ? (wavwidth * 100 / (1e12 / freq)) : (wavwidth * 50 / (c / freq));
+			final double val = k ? 100 : 50;
 			final String format  = k ? "%.0f ps" : "%.0f mm";
 			double nval = 0;
 			for (double i = stride; i < N-30; i += stride) {
@@ -83,7 +84,7 @@ public class Gui extends JPanel {
 		int ypoints[] = new int[N];
 		for (int i=0; i < N; i++) {
 			xpoints[i] = 20 + i;
-			ypoints[i] = (int)(-Math.sin((i * Math.PI / wavwidth * 2 ) + (phase / 180 * Math.PI)) * 0.8 * sy + by);
+			ypoints[i] = (int)(-Math.sin((i * Math.PI / wavwidth * 2 ) + (-phase / 180 * Math.PI)) * 0.8 * sy + by);
 		}
 		g.drawPolyline(xpoints, ypoints, N);
 

@@ -238,10 +238,13 @@ recompute:
         }
       }
 
-      char ich = 0; //getch();
-      if (ich == '0') {
+      //char ich = 0; //getch();
+      //if (ich == '0') {
+      if (unlink("rezero") == 0) {
         accumCount += ACCUM_LEN;
         accumDivisor += ACCUM_LEN;
+	offsetI = 0;
+	offsetQ = 0;
       }
 
       timespec_get(&tsAfter, TIME_UTC);
