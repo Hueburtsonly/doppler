@@ -16,6 +16,8 @@ spectrum: spectrum.cpp spectrum_cmd.cpp spectrum_hw.cpp images/monospace.h
 runspectrum: spectrum
 	./spectrum
 
+iqrecord: iqrecord.cpp usbtg.cpp usbtg.h
+	g++ iqrecord.cpp usbtg.cpp -o iqrecord -Wl,-rpath,/usr/local/lib -lbb_api -lftdi -lcurses
 
 images/process: images/process.cpp
 	g++ images/process.cpp -o images/process -lpng
