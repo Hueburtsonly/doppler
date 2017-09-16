@@ -167,6 +167,7 @@ int main(int argc, const char** argv) {
       }
       double avgAbs = hypot(sumI, sumQ);
 recompute:
+      angleOffset = -1.3 / 180.0 * 3.141596 * bd / 1.0e9;
       float normI = (cos(angleOffset) * sumI / avgAbs + sin(angleOffset) * sumQ / avgAbs);
       float normQ = (cos(angleOffset) * sumQ / avgAbs - sin(angleOffset) * sumI / avgAbs);
       float angle = atan2(normI, normQ);
