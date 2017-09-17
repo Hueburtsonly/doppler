@@ -235,12 +235,16 @@ int main(int argc, char* const* argv) {
       goto unwindFromTg;
     }
     fprintf(stderr, "N = %d\r\n", N);
+    fprintf(stderr, "samplesPerSecond = %d\r\n", samplesPerSecond);
     size_t bufferLen = 2 * N * sizeof(float);
     float* iqData = (float*)malloc(bufferLen);
 
     frameCount = (int)((samplesPerSecond * length + N - 1) / N);
-
-    for (int frame = 0; frame++; frame < frameCount) {
+    length = 0; //frameCount * (double)N / samplesPerSecond;
+    fprintf(stderr, "frameCount = %d\r\n", frameCount);
+    
+    for (int frame = 0; frame < frameCount; frame++) {
+      // fprintf(stderr, "frame = %d\r\n", frame);
       status = bbFetchRaw(device, iqData, 0);
       if (status == bbADCOverflow) {
         // Take special action.
@@ -253,9 +257,11 @@ int main(int argc, char* const* argv) {
       }
 
       fwrite((void*)iqData, bufferLen, 1, outfile);
+      length = (frame+1) * (double)N / samplesPerSecond;
 
       if (closing) {
         fprintf(stderr, "\r\n\nCancelled.\r\n");
+        exitCode = 2;
         break;
       }
 
